@@ -1,6 +1,8 @@
 from enum import Enum
 from pprint import pprint
 from math import sqrt
+import time
+import copy
 
 
 class Map(Enum):
@@ -101,12 +103,47 @@ class Player:
         self.pos = self._map.start # 現在位置
         self.openlist = [(self._map.start, None, self._map.start.ed(self._map.goal))]
         self.closelist = []
+        self.g = 0
+
+    def update_openlist(self):
+        pass
+
+    def pick_route_from_openlist(self):
+        pass
+
+    def move(self, pos) -> None:
+        # print("Move to ", pos)
+        self.pos = pos
+        self._map.set_mapobj(pos, Map.ROUTE)
+        self.g += 1
+
+
+class GPlayer(Player):
+    """
+    Greedy
+    """
+    def __init__(self, fieldmap):
+        super().__init__(fieldmap)
+
+    def play(self) -> bool:
+        while True:
+            print(self._map)
+            if len(self.openlist) == 0:
+                print("Failed")
+                return False
+            node = self.pick_route_from_openlist()
+            # print("Wanna go ", node[0])
+            if node[0] == self._map.goal:
+                print("Success")
+                return True
+            self.move(node[0])
+            self.update_openlist()
 
     def update_openlist(self) -> None:
         """
         動ける範囲を返す
         """
-        self.openlist = []
+        # self.openlist = []
         candidates = [self.pos.up(), self.pos.down(), self.pos.left(), self.pos.right()]
         candidates = list(filter(lambda pos: pos.x >= 0 and pos.x < self._map.width and pos.y >= 0 and pos.y < self._map.height, candidates))
         for c in candidates:
@@ -122,22 +159,19 @@ class Player:
         self.closelist.append(route[0])
         return route
 
-    def move(self, pos) -> None:
-        # print("Move to ", pos)
-        self.pos = pos
-        self._map.set_mapobj(pos, Map.ROUTE)
+    def result(self):
+        print(self._map)
 
-
-class GPlayer(Player):
+class APlayer(Player):
     """
-    Greedy
+    A*
     """
     def __init__(self, fieldmap):
         super().__init__(fieldmap)
 
     def play(self) -> bool:
         while True:
-            # print(self._map)
+            print(self._map)
             if len(self.openlist) == 0:
                 print("Failed")
                 return False
@@ -147,21 +181,73 @@ class GPlayer(Player):
                 print("Success")
                 return True
             self.move(node[0])
-            self.update_openlist()
+            self.update_openlist() # 子ノード展開
+
+    def update_openlist(self):
+        """
+        動ける範囲を返す
+        """
+        # self.openlist = []
+        candidates = [self.pos.up(), self.pos.down(), self.pos.left(), self.pos.right()]
+        candidates = list(
+            filter(lambda pos: pos.x >= 0 and pos.x < self._map.width and pos.y >= 0 and pos.y < self._map.height,
+                   candidates))
+        for c in candidates:
+            # print(c, " ", c.ed(self._map.goal))
+            if self._map.get_mapobj(c) != Map.WALL and c not in self.closelist:
+                cnode = (c, self.pos, self.g + c.ed(self._map.goal)) # 追加候補ノード
+                flag = False # スキップフラグ
+                for n in self.openlist:
+                    if n[0] == cnode[0] and n[2] > cnode[2]: #n'がすでに存在かつ、候補ノードのほうがコスト低い場合
+                        flag = True
+                        self.openlist.remove(n)
+                        self._map.set_mapobj(n[0], Map.NONE)
+                        self.openlist.append(cnode)
+                        self._map.set_mapobj(cnode, Map.TRIED)
+                if flag:
+                    continue
+                self.openlist.append(cnode)
+                self._map.set_mapobj(c, Map.TRIED)
+
+    def pick_route_from_openlist(self):
+        self.openlist.sort(key=lambda x: x[2])
+        self.openlist.reverse()
+        route = self.openlist.pop()
+        self.closelist.append(route[0])
+        return route
 
     def result(self):
         print(self._map)
+        print(self.closelist)
 
 def get_map(w, h, spos, gpos):
     return MapField([[Map.NONE for x in range(w)] for y in range(h)], w, h, spos, gpos)
 
 
 if __name__ == '__main__':
+    print("Loading Maps...")
     _map = get_map(13, 11, Pos(5,9), Pos(5,0))
     for i in range(3,8):
         _map.set_mapobj(Pos(i, 2), Map.WALL)
-    print("[1] Trying Greedy")
-    p1 = GPlayer(_map)
+    print("Loaded.")
+    print(_map)
 
-    p1.play()
-    p1.result()
+    # print("====================================")
+    #
+    # print("[1] Trying Greedy...")
+    # p1 = GPlayer(copy.deepcopy(_map))
+    # start = time.time()
+    # p1.play()
+    # elapsed_time = time.time() - start
+    # p1.result()
+    # print("Elapsed time: %f [sec]" % elapsed_time)
+
+    print("====================================")
+
+    print("[2] Trying A*...")
+    p2 = APlayer(copy.deepcopy(_map))
+    start = time.time()
+    p2.play()
+    elapsed_time = time.time() - start
+    p2.result()
+    print("Elapsed time: %f [sec]" % elapsed_time)
